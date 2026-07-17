@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tainan Wanderer Pro</title>
+    <!-- Tailwind CSS & FontAwesome & Alpine.js -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .serif-font { font-family: 'Playfair Display', 'Noto Sans TC', serif; }
+        .smooth-transition { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="flex justify-center min-h-screen bg-slate-900 smooth-transition">
+
+    <!-- 主 App 狀態管理（串接 LocalStorage 實現永續存檔） -->
+    <div x-data="{
+        currentDay: 1,
+        activeTab: 'itinerary',
+        budgetLimit: 3000,
+        
+        // 從 LocalStorage 載入景點狀態，若無則用預設值
+        spots: Alpine.$persist({
+            s1_1: { title: '國華街 & 正興街', cost: 150, checked: false, time: '09:30 AM', category: '美食', desc: '進攻一味品碗粿、金得春捲，散步正興街。', map: '國華街三段' },
+            s1_2: { title: '台南孔廟', cost: 50, checked: false, time: '11:30 AM', category: '古蹟', desc: '欣賞古樸紅牆，在老榕樹下享受微風。', map: '台南孔廟' },
+            s1_3: { title: '赤崁樓', cost: 50, checked: false, time: '02:00 PM', category: '古蹟', desc: '探索荷蘭時期城堡，來杯義豐冬瓜茶消暑。', map: '赤崁樓' },
+            s1_4: { title: '神農街老屋散策', cost: 100, checked: false, time: '04:00 PM', category: '人文', desc: '夜幕低垂時，欣賞兩旁燈籠亮起的復古氛圍。', map: '神農街' },
+            s1_5: { title: '花園夜市', cost: 250, checked: false, time: '06:30 PM', category: '夜市', desc: '大啖二師兄滷味、香酥臭豆腐。（限四六日）', map: '花園夜市' },
+            s2_1: { title: '四草綠色隧道', cost: 200, checked: false, time: '09:30 AM', category: '生態', desc: '體驗袖珍版亞馬遜，搭乘竹筏穿梭紅樹林。', map: '四草綠色隧道' },
+            s2_2: { title: '安平古堡 & 樹屋', cost: 150, checked: false, time: '01:30 PM', category: '古蹟', desc: '探訪斑駁老牆，老街必吃周氏蝦捲與東東蝦餅。', map: '安平古堡' },
+            s2_3: { title: '漁光島夕陽', cost: 0, checked: false, time: '05:30 PM', category: '絕景', desc: '踩在細軟沙灘上，欣賞沒入海平線的紫金色晚霞。', map: '漁光島沙灘' },
+            s2_4: { title: '大東 / 武聖夜市', cost: 250, checked: false, time: '07:30 PM', category: '夜市', desc: '大東（一二五）或武聖（三五六）繼續大快朵頤。', map: '武聖夜市' },
+            s3_1: { title: '奇美博物館', cost: 200, checked: false, time: '09:30 AM', category: '藝術', desc: '純白希臘風宮殿，參觀世界級兵器與小提琴館藏。', map: '奇美博物館' },
+            s3_2: { title: '十鼓文創園區', cost: 450, checked: false, time: '02:00 PM', category: '冒險', desc: '舊糖廠大改造！挑戰高空滑索與震撼的擊樂表演。', map: '十鼓文創園區' },
+            s3_3: { title: '三井 OUTLET', cost: 300, checked: false, time: '04:30 PM', category: '購物', desc: '高鐵站旁最後採購伴手禮，在冷氣房悠閒歇腳。', map: 'MITSUI+OUTLET+PARK+台南' },
+            s3_4: { title: '高鐵台南站', cost: 0, checked: false, time: '06:00 PM', category: '賦歸', desc: '提著戰利品，踏上回程，期待下次再出發。', map: '高鐵台南站' }
+        }).as('my_trip_spots'),
+
+        // 從 LocalStorage 載入行李清單
+        checklist: Alpine.$persist([
+            { text: '防蚊液（四草綠色隧道必備）', done: false },
+            { text: '防曬乳、遮陽帽、太陽眼鏡', done: false },
+            { text: '悠遊卡 / 一卡通（搭公車、YouBike 超方便）', done: false },
+            { text: '行動電源 & 充足的相機空間', done: false },
+            { text: '夾腳拖（去漁光島踩水必帶）', done: false }
+        ]).as('my_trip_checklist'),
+
+        get totalSpent() {
+            return Object.values(this.spots).filter(s => s.checked).reduce((sum, s) => sum + s.cost, 0);
+        },
+        get progress() {
+            const total = Object.keys(this.spots).length;
+            const done = Object.values(this.spots).filter(s => s.checked).length;
+            return Math.round((done / total) * 100) || 0;
+        },
+        get theme() {
+            if (this.currentDay === 1) {
+                return { gradient: 'from-orange-500 to-amber-600', bg: 'bg-amber-50/40', badge: 'bg-orange-50 text-orange-700 border-orange-200' };
+            } else if (this.currentDay === 2) {
+                return { gradient: 'from-cyan-500 to-teal-600', bg: 'bg-sky-50/40', badge: 'bg-sky-50 text-sky-700 border-sky-200' };
+            } else {
+                return { gradient: 'from-fuchsia-600 to-violet-700', bg: 'bg-purple-50/40', badge: 'bg-purple-50 text-purple-700 border-purple-200' };
+            }
+        }
+    }" 
+    class="w-full max-w-md bg-white min-h-screen shadow-2xl flex flex-col relative overflow-hidden smooth-transition"
+    :class="theme.bg">
+
+        <!-- App Header -->
+        <header class="px-6 pt-6 pb-2">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Zhaojie's Travel Assistant</p>
+                    <h1 class="text-3xl font-black text-slate-800 tracking-tight leading-none mt-1 serif-font">Tainan Wanderer</h1>
+                </div>
+                <div class="flex flex-col items-center bg-white/80 backdrop-blur border border-slate-100 rounded-xl p-2 shadow-sm">
+                    <span class="text-xs font-black text-slate-700" x-text="progress + '%'"></span>
+                    <span class="text-[8px] text-slate-400 uppercase font-bold tracking-wider">DONE</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 天數分頁 Tabs -->
+        <div x-show="activeTab === 'itinerary'" class="px-6 py-2 flex gap-3" x-transition>
+            <template x-for="day in [1, 2, 3]">
+                <button @click="currentDay = day" 
+                    class="px-5 py-3 rounded-2xl text-xs font-bold tracking-wider transition-all duration-300 flex-1 flex flex-col items-center gap-0.5"
+                    :class="currentDay === day ? 'bg-gradient-to-r ' + theme.gradient + ' text-white shadow-lg scale-105' : 'bg-white/80 border border-slate-100 text-slate-500'">
+                    <span class="text-[10px] opacity-75">DAY</span>
+                    <span class="text-base font-black" x-text="'0' + day"></span>
+                </button>
+            </template>
+        </div>
+
+        <!-- 主內容滾動區 -->
+        <main class="flex-1 px-6 py-4 overflow-y-auto pb-24">
+            <!-- TAB: 行程線 -->
+            <div x-show="activeTab === 'itinerary'" class="space-y-6">
+                <div class="relative pl-4 border-l-2 border-dashed border-slate-200 ml-2 space-y-6">
+                    <template x-for="(spot, id) in spots" :key="id">
+                        <div x-show="id.startsWith('s' + currentDay)" class="relative">
+                            <div @click="spot.checked = !spot.checked" 
+                                class="absolute -left-[25px] top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-md cursor-pointer smooth-transition flex items-center justify-center"
+                                :class="spot.checked ? 'bg-emerald-500 scale-125' : 'bg-slate-300'">
+                                <i x-show="spot.checked" class="fa-solid fa-check text-[8px] text-white"></i>
+                            </div>
+                            <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-slate-100 shadow-sm smooth-transition" :class="spot.checked ? 'opacity-50 saturate-50' : ''">
+                                <div class="flex justify-between items-start mb-1">
+                                    <span class="text-[10px] font-bold text-slate-400"><i class="fa-regular fa-clock"></i> <span x-text="spot.time"></span></span>
+                                    <span class="text-[9px] px-2 py-0.5 rounded-full font-bold border" :class="theme.badge" x-text="spot.category"></span>
+                                </div>
+                                <h3 class="font-extrabold text-slate-800 text-sm" x-text="spot.title"></h3>
+                                <p class="text-xs text-slate-500 mt-1" x-text="spot.desc"></p>
+                                <div class="flex justify-between items-center mt-3 pt-2 border-t border-slate-50">
+                                    <span class="text-[10px] font-bold text-slate-400">預估: <span class="text-slate-700" x-text="'$' + spot.cost"></span></span>
+                                    <div class="flex gap-2">
+                                        <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(spot.map)" target="_blank" class="text-[10px] bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium">📍 地圖</a>
+                                        <button @click="spot.checked = !spot.checked" class="text-[10px] px-2.5 py-1 rounded-lg font-bold text-white" :class="spot.checked ? 'bg-slate-400' : 'bg-slate-800'">
+                                            <span x-text="spot.checked ? '取消打卡' : '打卡去過'"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- TAB: 行李清單 -->
+            <div x-show="activeTab === 'checklist'" class="space-y-4" x-transition>
+                <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-5 text-white shadow-md">
+                    <h2 class="text-lg font-bold serif-font"><i class="fa-solid fa-clipboard-list"></i> 行前行李檢查</h2>
+                </div>
+                <div class="bg-white/80 rounded-2xl p-4 border border-slate-100 shadow-sm space-y-2">
+                    <template x-for="(item, index) in checklist" :key="index">
+                        <label class="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 cursor-pointer">
+                            <input type="checkbox" x-model="item.done" class="w-4 h-4 rounded text-purple-600">
+                            <span class="text-xs text-slate-600 font-medium" :class="item.done ? 'line-through text-slate-400' : ''" x-text="item.text"></span>
+                        </label>
+                    </template>
+                </div>
+            </div>
+
+            <!-- TAB: 預算看板 -->
+            <div x-show="activeTab === 'dashboard'" class="space-y-4" x-transition>
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 text-white shadow-md">
+                    <h2 class="text-lg font-bold serif-font"><i class="fa-solid fa-chart-pie"></i> 旅程花費統計</h2>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white/80 rounded-2xl p-4 border border-slate-100 text-center"><span class="text-[10px] text-slate-400">目前累計開銷</span><p class="text-xl font-black text-slate-800 mt-1" x-text="'$' + totalSpent"></p></div>
+                    <div class="bg-white/80 rounded-2xl p-4 border border-slate-100 text-center"><span class="text-[10px] text-slate-400">行程解鎖進度</span><p class="text-xl font-black text-slate-800 mt-1" x-text="progress + '%'"></p></div>
+                </div>
+                <div class="bg-white/80 rounded-2xl p-4 border border-slate-100 shadow-sm">
+                    <div class="flex justify-between text-xs font-bold text-slate-600 mb-2"><span>預算警戒線 ($3,000)</span><span x-text="Math.round((totalSpent/budgetLimit)*100) + '%'"></span></div>
+                    <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-emerald-500 transition-all duration-500" :style="'width: ' + Math.min((totalSpent/budgetLimit)*100, 100) + '%'"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 底部導航欄 -->
+        <nav class="absolute bottom-4 left-6 right-6 bg-white/95 backdrop-blur border border-slate-100 shadow-xl rounded-2xl p-2 flex justify-around items-center z-50">
+            <button @click="activeTab = 'itinerary'" class="flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition" :class="activeTab === 'itinerary' ? 'text-slate-900 bg-slate-50 font-bold' : 'text-slate-400'"><i class="fa-solid fa-map-location-dot text-sm"></i><span class="text-[8px]">每日行程</span></button>
+            <button @click="activeTab = 'checklist'" class="flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition" :class="activeTab === 'checklist' ? 'text-slate-900 bg-slate-50 font-bold' : 'text-slate-400'"><i class="fa-solid fa-list-check text-sm"></i><span class="text-[8px]">行李清單</span></button>
+            <button @click="activeTab = 'dashboard'" class="flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition" :class="activeTab === 'dashboard' ? 'text-slate-900 bg-slate-50 font-bold' : 'text-slate-400'"><i class="fa-solid fa-chart-pie text-sm"></i><span class="text-[8px]">預算進度</span></button>
+        </nav>
+    </div>
+
+    <!-- 引入 AlpineJS LocalStorage 外掛 -->
+    <script src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
+</body>
+</html>
